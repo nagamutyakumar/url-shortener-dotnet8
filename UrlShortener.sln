@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CA347901-853
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.Api", "src\UrlShortener.Api\UrlShortener.Api.csproj", "{D1480C89-2315-4DA4-9B65-CD7A479C7E61}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5709E109-4365-4D16-9153-DC2DA05E3CE4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.UnitTests", "tests\UrlShortener.UnitTests\UrlShortener.UnitTests.csproj", "{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{D1480C89-2315-4DA4-9B65-CD7A479C7E61}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D1480C89-2315-4DA4-9B65-CD7A479C7E61}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D1480C89-2315-4DA4-9B65-CD7A479C7E61}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D1480C89-2315-4DA4-9B65-CD7A479C7E61} = {CA347901-8531-444E-B703-E12B52EF2E80}
+		{8AE9DFC5-E5F0-42AF-83DA-1AE32098F054} = {5709E109-4365-4D16-9153-DC2DA05E3CE4}
 	EndGlobalSection
 EndGlobal
