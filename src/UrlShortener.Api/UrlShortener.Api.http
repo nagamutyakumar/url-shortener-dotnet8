@@ -1,1 +1,18 @@
 @UrlShortener.Api_HostAddress = http://localhost:5210
+
+### Create (201) or reuse (200) a short URL
+POST {{UrlShortener.Api_HostAddress}}/api/v1/shorten
+Content-Type: application/json
+
+{
+  "originalUrl": "https://example.com/docs?page=1",
+  "expiresAtUtc": "2030-01-01T00:00:00Z"
+}
+
+### Validation failure (400)
+POST {{UrlShortener.Api_HostAddress}}/api/v1/shorten
+Content-Type: application/json
+
+{
+  "originalUrl": "javascript:alert(1)"
+}

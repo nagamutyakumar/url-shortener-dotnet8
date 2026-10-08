@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.ShortCodes;
+using UrlShortener.Api.Shortening;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,8 +16,25 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IShortCodeGenerator, RandomShortCodeGenerator>();
 builder.Services.AddDbContext<UrlShortenerDbContext>(options =>
     options.UseSqlServer(connectionString));
+builder.Services.AddSingleton<IShortCodeConflictDetector, SqlServerShortCodeConflictDetector>();
+builder.Services.AddScoped<UrlShorteningService>();
+builder.Services.AddSingleton<ShortUrlBuilder>();
+builder.Services.AddOptions<ShortUrlOptions>()
+    .Bind(builder.Configuration.GetSection(ShortUrlOptions.SectionName))
+    .Validate(
+        o => ShortUrlOptions.IsValidPublicBaseUrl(o.PublicBaseUrl),
+        $"{ShortUrlOptions.SectionName}:PublicBaseUrl must be an absolute http(s) URL without credentials, query or fragment.")
+    .ValidateOnStart();
+builder.Services.AddProblemDetails();
+// Development defaults this to true, which turns unreadable request bodies into
+// BadHttpRequestException; UseExceptionHandler (.NET 8) would then answer 500 instead of 400.
+// With false, binding failures return 400 in every environment and are logged at Debug.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 if (app.Environment.IsDevelopment())
 {
@@ -26,4 +44,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.MapShortenEndpoint();
+
 app.Run();
+
+// Exposes the entry point to WebApplicationFactory<Program> in the HTTP-level tests.
+public partial class Program;
