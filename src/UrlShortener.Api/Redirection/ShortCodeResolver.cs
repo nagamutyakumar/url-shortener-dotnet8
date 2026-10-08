@@ -4,6 +4,8 @@ using UrlShortener.Api.ShortCodes;
 
 namespace UrlShortener.Api.Redirection;
 
+public sealed record ResolvedShortCode(long UrlMappingId, string OriginalUrl);
+
 /// <summary>
 /// Resolves a short code to the URL it redirects to.
 /// </summary>
@@ -23,8 +25,8 @@ public sealed class ShortCodeResolver
         _timeProvider = timeProvider;
     }
 
-    /// <returns>The original URL, or null when the code does not resolve.</returns>
-    public async Task<string?> ResolveAsync(string code, CancellationToken cancellationToken)
+    /// <returns>The mapping id and original URL, or null when the code does not resolve.</returns>
+    public async Task<ResolvedShortCode?> ResolveAsync(string code, CancellationToken cancellationToken)
     {
         // Malformed codes can never match, so they are rejected without a query.
         if (!ShortCodeFormat.IsValid(code))
@@ -45,13 +47,13 @@ public sealed class ShortCodeResolver
             .Where(m => m.ShortCode == code
                 && m.IsActive
                 && (m.ExpiresAtUtc == null || m.ExpiresAtUtc > now))
-            .Select(m => new { m.ShortCode, m.OriginalUrl })
+            .Select(m => new { m.Id, m.ShortCode, m.OriginalUrl })
             .FirstOrDefaultAsync(cancellationToken);
 
         // Re-checked ordinally so a collation change could never redirect "abc1234" to the
         // mapping for "ABC1234".
         return match is not null && string.Equals(match.ShortCode, code, StringComparison.Ordinal)
-            ? match.OriginalUrl
+            ? new ResolvedShortCode(match.Id, match.OriginalUrl)
             : null;
     }
 }

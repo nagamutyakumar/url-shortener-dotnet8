@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
+using UrlShortener.Api.Analytics;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.ShortCodes;
 
@@ -50,8 +53,12 @@ public sealed class FakeShortCodeConflictDetector : IShortCodeConflictDetector
 public sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
 {
     private readonly Queue<Exception> _failures = new();
+    private int _attempts;
 
     public bool FailForever { get; set; }
+
+    /// <summary>SaveChanges calls seen so far, failed or not.</summary>
+    public int Attempts => Volatile.Read(ref _attempts);
 
     public void Enqueue(Exception exception) => _failures.Enqueue(exception);
 
@@ -60,6 +67,8 @@ public sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
+        Interlocked.Increment(ref _attempts);
+
         if (FailForever)
         {
             throw new FakeShortCodeConflictException();
@@ -95,4 +104,45 @@ public sealed class InMemoryRowVersionInterceptor : SaveChangesInterceptor
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
+}
+
+public sealed class RecordingClickEventQueue : IClickEventQueue
+{
+    public ConcurrentQueue<ClickEventMessage> Messages { get; } = new();
+
+    public bool TryEnqueue(ClickEventMessage message)
+    {
+        Messages.Enqueue(message);
+        return true;
+    }
+}
+
+public sealed class ThrowingClickEventQueue : IClickEventQueue
+{
+    public int Calls;
+
+    public bool TryEnqueue(ClickEventMessage message)
+    {
+        Interlocked.Increment(ref Calls);
+        throw new InvalidOperationException("Simulated analytics queue failure.");
+    }
+}
+
+/// <summary>Captures log entries so tests can assert that failures and drops are reported.</summary>
+public sealed class ListLogger<T> : ILogger<T>
+{
+    public ConcurrentQueue<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = new();
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter) =>
+        Entries.Enqueue((logLevel, formatter(state, exception), exception));
 }

@@ -22,3 +22,9 @@ GET {{UrlShortener.Api_HostAddress}}/Abc1234
 
 ### Unknown, inactive, expired or malformed code (404)
 GET {{UrlShortener.Api_HostAddress}}/not-a-code
+
+### Click analytics (200) for an existing code, including inactive or expired ones
+GET {{UrlShortener.Api_HostAddress}}/api/v1/analytics/Abc1234
+
+### Malformed or unknown code (404)
+GET {{UrlShortener.Api_HostAddress}}/api/v1/analytics/not-a-code

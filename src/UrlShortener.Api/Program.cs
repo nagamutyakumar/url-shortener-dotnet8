@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using UrlShortener.Api.Analytics;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Redirection;
 using UrlShortener.Api.ShortCodes;
@@ -27,6 +28,21 @@ builder.Services.AddOptions<ShortUrlOptions>()
         o => ShortUrlOptions.IsValidPublicBaseUrl(o.PublicBaseUrl),
         $"{ShortUrlOptions.SectionName}:PublicBaseUrl must be an absolute http(s) URL without credentials, query or fragment.")
     .ValidateOnStart();
+builder.Services.AddOptions<ClickAnalyticsOptions>()
+    .Bind(builder.Configuration.GetSection(ClickAnalyticsOptions.SectionName))
+    .Validate(
+        ClickAnalyticsOptions.IsValid,
+        $"{ClickAnalyticsOptions.SectionName}: QueueCapacity must be 1-1000000, BatchSize 1-1000, and " +
+        $"VisitorHashSecret, when set, at least {ClickAnalyticsOptions.MinVisitorHashSecretLength} characters.")
+    .ValidateOnStart();
+// Click analytics: redirects enqueue into a bounded in-memory channel; a hosted service
+// persists the events. Best-effort by design (see ClickEventQueue and ClickEventWriter).
+builder.Services.AddSingleton<ClickEventQueue>();
+builder.Services.AddSingleton<IClickEventQueue>(sp => sp.GetRequiredService<ClickEventQueue>());
+builder.Services.AddSingleton<VisitorHasher>();
+builder.Services.AddSingleton<ClickTracker>();
+builder.Services.AddHostedService<ClickEventWriter>();
+builder.Services.AddScoped<ClickAnalyticsService>();
 builder.Services.AddProblemDetails();
 // Development defaults this to true, which turns unreadable request bodies into
 // BadHttpRequestException; UseExceptionHandler (.NET 8) would then answer 500 instead of 400.
@@ -47,6 +63,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapShortenEndpoint();
+app.MapClickAnalyticsEndpoint();
 app.MapRedirectEndpoint();
 
 app.Run();

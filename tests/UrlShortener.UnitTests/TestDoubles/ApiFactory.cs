@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using UrlShortener.Api.Analytics;
 using UrlShortener.Api.Persistence;
 
 namespace UrlShortener.UnitTests.TestDoubles;
@@ -27,6 +28,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public FailingSaveChangesInterceptor Interceptor { get; } = new();
 
+    /// <summary>Extra configuration values, e.g. "Analytics:QueueCapacity".</summary>
+    public Dictionary<string, string?> Settings { get; } = new();
+
+    /// <summary>Runs after the default test overrides, to swap in further test doubles.</summary>
+    public Action<IServiceCollection>? ConfigureServices { get; init; }
+
+    /// <summary>When false, nothing drains the click event queue.</summary>
+    public bool RunClickEventWriter { get; init; } = true;
+
     /// <summary>A separate context over the same InMemory store, for seeding and assertions.</summary>
     public UrlShortenerDbContext Database => new(
         new DbContextOptionsBuilder<UrlShortenerDbContext>()
@@ -40,6 +50,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment(_environment);
         // Program requires a connection string at startup; it is never used.
         builder.UseSetting("ConnectionStrings:UrlShortener", "Server=unused;Database=unused");
+        foreach (var (key, value) in Settings)
+        {
+            builder.UseSetting(key, value);
+        }
+
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<UrlShortenerDbContext>>();
@@ -48,6 +63,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
                 .AddInterceptors(Interceptor, new InMemoryRowVersionInterceptor()));
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(TimeProvider);
+            if (!RunClickEventWriter)
+            {
+                services.Remove(services.Single(d => d.ImplementationType == typeof(ClickEventWriter)));
+            }
+
+            ConfigureServices?.Invoke(services);
         });
     }
 }

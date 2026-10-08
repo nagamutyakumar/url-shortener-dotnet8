@@ -25,6 +25,18 @@ public sealed class ShortCodeResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_ReturnsMappingIdForClickTracking()
+    {
+        var mapping = Mapping("Abc1234", "https://example.com/");
+        await SeedAsync(Mapping("Other01", "https://example.com/other"), mapping);
+        await using var context = CreateContext();
+
+        var resolved = await new ShortCodeResolver(context, _timeProvider).ResolveAsync("Abc1234", default);
+
+        Assert.Equal(new ResolvedShortCode(mapping.Id, "https://example.com/"), resolved);
+    }
+
+    [Fact]
     public async Task ResolveAsync_UnknownCode_ReturnsNull()
     {
         await SeedAsync(Mapping("Abc1234", "https://example.com/"));
@@ -138,7 +150,7 @@ public sealed class ShortCodeResolverTests
     private async Task<string?> ResolveAsync(string code)
     {
         await using var context = CreateContext();
-        return await new ShortCodeResolver(context, _timeProvider).ResolveAsync(code, default);
+        return (await new ShortCodeResolver(context, _timeProvider).ResolveAsync(code, default))?.OriginalUrl;
     }
 
     private UrlShortenerDbContext CreateContext() => new(

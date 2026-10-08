@@ -41,3 +41,29 @@ behaviour below. Same harness as above; seed rows directly through the context a
 | R5 | `IsActive = 0` row; row with `ExpiresAtUtc` in the past | 404 for both |
 | R6 | Malformed codes (`/abc`, `/Abc-123`, `/Abc%2F12`) | 404 and no `SELECT` against `UrlMappings` in the command log |
 | R7 | Abort the request mid-query (client disconnect) | Query is cancelled via `HttpContext.RequestAborted`; no unhandled-exception log noise beyond the expected cancellation |
+
+# Integration test plan: click analytics
+
+The analytics tests run on InMemory. `ClickAnalyticsSqlTranslationTests` translate the
+aggregate queries with the real SQL Server provider (`ToQueryString`, no connection), which
+proves they run server-side. It does not prove what the SQL returns. InMemory cannot show:
+
+- **Distinct hashes.** InMemory's `Distinct()` compares `byte[]` by reference, so equal hashes
+  are not merged. The unit tests therefore use only distinct hashes.
+- **Foreign keys.** InMemory does not enforce `FK_ClickEvents_UrlMappings_UrlMappingId`.
+- **Transactions.** It does not show that a batch insert is all-or-nothing within one transaction.
+- **`datetime2(3)` rounding** of `ClickedAtUtc`.
+- **Collation-based case sensitivity** of the analytics lookup.
+- **SqlClient behaviour** under cancellation, timeouts, connection-pool pressure or a down server.
+
+| # | Scenario | Expected |
+|---|----------|----------|
+| A1 | Redirect once; read the `ClickEvents` row | One row; `UrlMappingId` matches; `ClickedAtUtc` is the injected clock rounded to `datetime2(3)` with `Kind = Utc`; `VisitorHash` is 32 bytes (secret set, real remote IP) or NULL; `CountryCode` and `Browser` are NULL |
+| A2 | Seed 3 clicks with the same `VisitorHash` value (separate arrays), 2 with distinct values, and 1 with NULL | `uniqueVisitors` = `partial`, count 3, `clicksWithVisitorHash` 5. Proves `COUNT_BIG(DISTINCT)` compares `binary(32)` by value and ignores NULLs |
+| A3 | Same visitor (same IP and User-Agent, secret set) clicks one link twice and another link once | Link 1: 2 clicks, 1 unique visitor. The two links' hashes differ |
+| A4 | Writer batch containing a `UrlMappingId` with no mapping row | FK violation is logged as an error; the **whole batch** is rolled back and discarded; the writer keeps running; later batches persist |
+| A5 | Stop SQL Server, then redirect 50 times | Every response is 302 with no added latency from the database; errors are logged per batch; queue drops are logged once the queue is full. After the server restarts, new clicks persist; lost clicks are not replayed |
+| A6 | Inspect the SQL and plan for `GET /api/v1/analytics/{code}` | Mapping lookup uses `UX_UrlMappings_ShortCode` with a `varchar` parameter. Summary and country queries seek `IX_ClickEvents_UrlMappingId_ClickedAtUtc` (plus key lookups). No client-side evaluation |
+| A7 | Seed `Abc1234`; call analytics for `abc1234` | 404. The collation drives the match, as in R1 |
+| A8 | Insert 100 queued clicks with `BatchSize` = 100 | Batched into a few round trips (EF `MERGE … OUTPUT`), not 100 single inserts |
+| A9 | Send SIGTERM with clicks buffered | Buffered clicks persist within `ShutdownFlushTimeout` (5 s); otherwise the unwritten count is logged |
