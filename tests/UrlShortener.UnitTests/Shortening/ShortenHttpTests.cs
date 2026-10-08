@@ -1,13 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Shortening;
 using UrlShortener.UnitTests.TestDoubles;
 
@@ -55,7 +49,7 @@ public sealed class ShortenHttpTests
     [MemberData(nameof(BadBodies))]
     public async Task UnreadableBody_Returns400ProblemDetails(string environment, string body)
     {
-        await using var factory = new ApiFactory(environment);
+        await using var factory = new ApiFactory(environment, Now);
 
         using var response = await PostAsync(factory, body);
 
@@ -70,7 +64,7 @@ public sealed class ShortenHttpTests
     [MemberData(nameof(Environments))]
     public async Task PastExpirationWithOffset_Returns400FieldValidationError(string environment)
     {
-        await using var factory = new ApiFactory(environment);
+        await using var factory = new ApiFactory(environment, Now);
 
         using var response = await PostAsync(
             factory,
@@ -86,7 +80,7 @@ public sealed class ShortenHttpTests
     [MemberData(nameof(Environments))]
     public async Task ValidRequestWithOffset_Returns201WithUtcExpiration(string environment)
     {
-        await using var factory = new ApiFactory(environment);
+        await using var factory = new ApiFactory(environment, Now);
 
         using var response = await PostAsync(
             factory,
@@ -101,7 +95,7 @@ public sealed class ShortenHttpTests
     [MemberData(nameof(Environments))]
     public async Task UnexpectedDatabaseFailure_Returns500(string environment)
     {
-        await using var factory = new ApiFactory(environment);
+        await using var factory = new ApiFactory(environment, Now);
         factory.Interceptor.Enqueue(new DbUpdateException("Simulated database failure."));
 
         using var response = await PostAsync(factory, """{"originalUrl":"https://example.com/a"}""");
@@ -113,37 +107,5 @@ public sealed class ShortenHttpTests
     {
         var client = factory.CreateClient();
         return client.PostAsync(ShortenEndpoint.Route, new StringContent(json, Encoding.UTF8, "application/json"));
-    }
-
-    private sealed class ApiFactory : WebApplicationFactory<Program>
-    {
-        private readonly string _environment;
-        private readonly string _databaseName = Guid.NewGuid().ToString();
-        private readonly FixedTimeProvider _timeProvider = new(Now);
-
-        public ApiFactory(string environment) => _environment = environment;
-
-        public FailingSaveChangesInterceptor Interceptor { get; } = new();
-
-        /// <summary>A separate context over the same InMemory store, for assertions.</summary>
-        public UrlShortenerDbContext Database => new(
-            new DbContextOptionsBuilder<UrlShortenerDbContext>().UseInMemoryDatabase(_databaseName).Options,
-            _timeProvider);
-
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment(_environment);
-            // Program requires a connection string at startup; it is never used.
-            builder.UseSetting("ConnectionStrings:UrlShortener", "Server=unused;Database=unused");
-            builder.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<DbContextOptions<UrlShortenerDbContext>>();
-                services.AddDbContext<UrlShortenerDbContext>(options => options
-                    .UseInMemoryDatabase(_databaseName)
-                    .AddInterceptors(Interceptor, new InMemoryRowVersionInterceptor()));
-                services.RemoveAll<TimeProvider>();
-                services.AddSingleton<TimeProvider>(_timeProvider);
-            });
-        }
     }
 }

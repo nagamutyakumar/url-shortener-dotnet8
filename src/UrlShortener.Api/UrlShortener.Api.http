@@ -16,3 +16,9 @@ Content-Type: application/json
 {
   "originalUrl": "javascript:alert(1)"
 }
+
+### Redirect (302 with Location) for an active code; replace with a code returned above
+GET {{UrlShortener.Api_HostAddress}}/Abc1234
+
+### Unknown, inactive, expired or malformed code (404)
+GET {{UrlShortener.Api_HostAddress}}/not-a-code

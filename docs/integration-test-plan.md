@@ -23,3 +23,21 @@ environment variable, never committed.
 | 7 | Read back `CreatedAtUtc`, `UpdatedAtUtc`, `ExpiresAtUtc` | `DateTimeKind.Utc`, timestamps from the injected `TimeProvider` |
 | 8 | 20 concurrent requests for the same new URL | All succeed; may create more than one mapping (accepted race, documented on `UrlShorteningService`); every returned code resolves to the URL |
 | 9 | Malformed JSON body, malformed `expiresAtUtc`, and `expiresAtUtc` without `Z`/offset | Covered in-process by `ShortenHttpTests` (Development and Production): 400 with a generic problem-details body, no per-field errors. Only re-check here against the real database setup |
+
+# Integration test plan: GET /{code}
+
+`ShortCodeResolverTests` and `RedirectHttpTests` run on InMemory, whose string `==` is
+always ordinal and whose `DateTime` comparison uses exact ticks. They prove the resolver's
+logic and the HTTP contract (302 + `Location`, generic 404), but **not** the SQL Server
+behaviour below. Same harness as above; seed rows directly through the context and call
+`GET /{code}` with `AllowAutoRedirect = false` so the destination is never contacted.
+
+| # | Scenario | Expected |
+|---|----------|----------|
+| R1 | Seed `Abc1234`; request `/abc1234`, `/ABC1234`, `/Abc1234` | 404, 404, 302. Proves the `Latin1_General_100_BIN2` column collation drives the `WHERE ShortCode = @code` comparison (the resolver's ordinal re-check would also hide a case-insensitive match, so additionally assert with SQL Profiler / `LogTo` that the generated SQL returns no row for the wrong case) |
+| R2 | Seed both `abc1234` and `ABC1234` with different URLs | Each redirects to its own URL |
+| R3 | Inspect the generated SQL for the lookup | Single parameterized query on `ShortCode` using `UX_UrlMappings_ShortCode` (index seek); parameter is `varchar(7)`/`char(7)`, not `nvarchar` (an `nvarchar` parameter would force an implicit conversion and a scan) |
+| R4 | `ExpiresAtUtc` = `2030-01-01T00:00:00.123`; clock at `.1225`, `.1229`, `.123`, `.1231` | 302, 302, 404, 404. Proves the resolver's millisecond truncation of "now" keeps the boundary exact despite SqlClient's handling of sub-millisecond `datetime2(3)` parameters |
+| R5 | `IsActive = 0` row; row with `ExpiresAtUtc` in the past | 404 for both |
+| R6 | Malformed codes (`/abc`, `/Abc-123`, `/Abc%2F12`) | 404 and no `SELECT` against `UrlMappings` in the command log |
+| R7 | Abort the request mid-query (client disconnect) | Query is cancelled via `HttpContext.RequestAborted`; no unhandled-exception log noise beyond the expected cancellation |

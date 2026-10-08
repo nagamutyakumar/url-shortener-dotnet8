@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Persistence;
+using UrlShortener.Api.Redirection;
 using UrlShortener.Api.ShortCodes;
 using UrlShortener.Api.Shortening;
 
@@ -18,6 +19,7 @@ builder.Services.AddDbContext<UrlShortenerDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddSingleton<IShortCodeConflictDetector, SqlServerShortCodeConflictDetector>();
 builder.Services.AddScoped<UrlShorteningService>();
+builder.Services.AddScoped<ShortCodeResolver>();
 builder.Services.AddSingleton<ShortUrlBuilder>();
 builder.Services.AddOptions<ShortUrlOptions>()
     .Bind(builder.Configuration.GetSection(ShortUrlOptions.SectionName))
@@ -45,6 +47,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapShortenEndpoint();
+app.MapRedirectEndpoint();
 
 app.Run();
 
