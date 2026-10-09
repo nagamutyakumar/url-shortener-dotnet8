@@ -12,7 +12,7 @@ namespace UrlShortener.Api.Shortening;
 /// silently applies the server's local offset, so the suffix is checked here. Failures
 /// throw <see cref="JsonException"/>, which minimal APIs turn into a 400 response before
 /// the handler runs. Fractional seconds are kept as parsed (up to 100 ns); truncation to
-/// the stored precision happens in <see cref="UrlShorteningService"/>.
+/// the stored precision happens in <see cref="ExpirationRules"/>.
 /// </remarks>
 public sealed partial class ExplicitOffsetDateTimeOffsetConverter : JsonConverter<DateTimeOffset?>
 {

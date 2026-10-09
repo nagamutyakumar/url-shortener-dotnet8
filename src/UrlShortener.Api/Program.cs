@@ -20,6 +20,7 @@ builder.Services.AddDbContext<UrlShortenerDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddSingleton<IShortCodeConflictDetector, SqlServerShortCodeConflictDetector>();
 builder.Services.AddScoped<UrlShorteningService>();
+builder.Services.AddScoped<ShortUrlManagementService>();
 builder.Services.AddScoped<ShortCodeResolver>();
 builder.Services.AddSingleton<ShortUrlBuilder>();
 builder.Services.AddOptions<ShortUrlOptions>()
@@ -63,6 +64,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapShortenEndpoint();
+// Unauthenticated PUT/DELETE: suitable for a controlled assessment or demo only.
+app.MapShortUrlManagementEndpoints();
 app.MapClickAnalyticsEndpoint();
 app.MapRedirectEndpoint();
 

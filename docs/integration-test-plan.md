@@ -67,3 +67,21 @@ proves they run server-side. It does not prove what the SQL returns. InMemory ca
 | A7 | Seed `Abc1234`; call analytics for `abc1234` | 404. The collation drives the match, as in R1 |
 | A8 | Insert 100 queued clicks with `BatchSize` = 100 | Batched into a few round trips (EF `MERGE … OUTPUT`), not 100 single inserts |
 | A9 | Send SIGTERM with clicks buffered | Buffered clicks persist within `ShutdownFlushTimeout` (5 s); otherwise the unwritten count is logged |
+
+# Integration test plan: PUT / DELETE /api/v1/shorten/{code}
+
+`ShortUrlManagementServiceTests` and `ShortUrlManagementHttpTests` run on InMemory. That
+provider does check concurrency tokens, but the rowversion values come from
+`InMemoryRowVersionInterceptor`, and string comparison is always ordinal. Against a real
+SQL Server, verify:
+
+| # | Scenario | Expected |
+|---|----------|----------|
+| M1 | Seed `Abc1234`; PUT and DELETE `abc1234` and `ABC1234` | 404 each; the `Abc1234` row's `RowVersion` is unchanged. Proves the binary collation drives the lookup |
+| M2 | Capture the SQL for a PUT (`LogTo`) | `SELECT ... WHERE ShortCode = @code` (varchar parameter, index seek), then `UPDATE [UrlMappings] SET ... WHERE [Id] = @p AND [RowVersion] = @p` with `SELECT @@ROWCOUNT` / `OUTPUT INSERTED.RowVersion` |
+| M3 | Two connections: load the row in request A, update it from B, then let A save (e.g. a debugger breakpoint, or `BeforeSaveChangesInterceptor` wired against SQL Server) | A gets 409; B's values remain; `RowVersion` is B's |
+| M4 | 20 concurrent PUTs with different URLs to one code | Each response is 200 or 409, no 500s. The final row equals the body of one of the 200 responses |
+| M5 | Concurrent PUT and DELETE on one code | Whatever the order, a 204 DELETE leaves the row inactive: a later PUT gets 404, and an overlapping PUT gets 409. Neither revives the link |
+| M6 | DELETE twice | 204, 204; the second `RowVersion`/`UpdatedAtUtc` equal the first (no UPDATE issued) |
+| M7 | Seed clicks, then PUT and DELETE | `ClickEvents` row count unchanged; analytics totals unchanged; `linkStatus` becomes `inactive` |
+| M8 | PUT `expiresAtUtc` = `...T00:00:00.1239Z` | Stored as `.123`, response shows `.123Z`; a following POST of the same URL and expiry reuses the code (hash updated, no rounding mismatch) |

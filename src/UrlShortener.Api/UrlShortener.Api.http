@@ -17,6 +17,48 @@ Content-Type: application/json
   "originalUrl": "javascript:alert(1)"
 }
 
+### Update destination and expiration (200); replace Abc1234 with a code returned above.
+### Management endpoints are unauthenticated: controlled assessment/demo use only.
+PUT {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
+Content-Type: application/json
+
+{
+  "originalUrl": "https://example.com/docs?page=2",
+  "expiresAtUtc": "2031-01-01T00:00:00Z"
+}
+
+### Update destination only: omitted expiresAtUtc keeps the current expiration (200)
+PUT {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
+Content-Type: application/json
+
+{
+  "originalUrl": "https://example.com/docs?page=3"
+}
+
+### Clear the expiration: explicit null means "never expires" (200)
+PUT {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
+Content-Type: application/json
+
+{
+  "originalUrl": "https://example.com/docs?page=3",
+  "expiresAtUtc": null
+}
+
+### Update validation failure (400): past expiration
+PUT {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
+Content-Type: application/json
+
+{
+  "originalUrl": "https://example.com/",
+  "expiresAtUtc": "2020-01-01T00:00:00Z"
+}
+
+### Soft delete (204); repeating it also returns 204. Redirects then 404, analytics stay 200
+DELETE {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
+
+### Update or delete an unknown, wrong-case, malformed or (for PUT) deleted code (404)
+DELETE {{UrlShortener.Api_HostAddress}}/api/v1/shorten/not-a-code
+
 ### Redirect (302 with Location) for an active code; replace with a code returned above
 GET {{UrlShortener.Api_HostAddress}}/Abc1234
 

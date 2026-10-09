@@ -12,8 +12,10 @@ namespace UrlShortener.Api.Shortening;
 /// Duplicate policy: an existing mapping is reused only when it is active, not yet
 /// expired, has the same canonical URL, and has exactly the same expiration as the
 /// request (both none, or the same instant to the millisecond). Otherwise a new
-/// mapping is created. Existing mappings are never modified, so a request can never
-/// shorten or extend the lifetime of a link someone else already shared.
+/// mapping is created. Creating never modifies an existing mapping, so a POST can never
+/// shorten or extend the lifetime of a link someone else already shared. (The management
+/// endpoints in <see cref="ShortUrlManagementService"/> can, and because of reuse a code
+/// may be shared by several callers; see docs/management.md.)
 /// Deduplication is best-effort: the hash index is not unique, so concurrent first-time
 /// requests for the same URL may each create a mapping. Every such code still works.
 /// </remarks>
@@ -53,7 +55,7 @@ public sealed class UrlShorteningService
             errors[nameof(ShortenUrlRequest.OriginalUrl)] = new[] { urlError };
         }
 
-        if (!TryNormalizeExpiration(request.ExpiresAtUtc, now, out var expiresAtUtc, out var expirationError))
+        if (!ExpirationRules.TryNormalize(request.ExpiresAtUtc, now, out var expiresAtUtc, out var expirationError))
         {
             errors[nameof(ShortenUrlRequest.ExpiresAtUtc)] = new[] { expirationError };
         }
@@ -72,39 +74,6 @@ public sealed class UrlShorteningService
         }
 
         return await CreateMappingAsync(canonicalUrl!, hash, expiresAtUtc, cancellationToken);
-    }
-
-    /// <summary>
-    /// Converts to UTC and requires a future instant. Truncates to the millisecond
-    /// precision of the datetime2(3) column so the response and the duplicate comparison
-    /// match what is stored. The explicit-offset requirement is enforced earlier, during
-    /// JSON binding, by <see cref="ExplicitOffsetDateTimeOffsetConverter"/>.
-    /// </summary>
-    private static bool TryNormalizeExpiration(
-        DateTimeOffset? requested,
-        DateTime nowUtc,
-        out DateTime? expiresAtUtc,
-        out string error)
-    {
-        expiresAtUtc = null;
-        error = string.Empty;
-
-        if (requested is not { } value)
-        {
-            return true;
-        }
-
-        var utc = value.UtcDateTime;
-        utc = new DateTime(utc.Ticks - utc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
-
-        if (utc <= nowUtc)
-        {
-            error = "The expiration must be in the future.";
-            return false;
-        }
-
-        expiresAtUtc = utc;
-        return true;
     }
 
     private async Task<UrlMapping?> FindReusableMappingAsync(

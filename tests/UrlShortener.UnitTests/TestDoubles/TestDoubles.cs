@@ -85,10 +85,14 @@ public sealed class FailingSaveChangesInterceptor : SaveChangesInterceptor
 
 /// <summary>
 /// SQL Server generates rowversion values; the InMemory provider does not but still
-/// enforces the required column, so this fills it in for inserted mappings.
+/// enforces the required column, so this fills it in for inserted mappings and replaces
+/// it for updated ones. The InMemory provider compares the original value with the stored
+/// one on update, so stale writes fail with DbUpdateConcurrencyException as on SQL Server.
 /// </summary>
 public sealed class InMemoryRowVersionInterceptor : SaveChangesInterceptor
 {
+    private static long _nextVersion;
+
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
@@ -96,13 +100,37 @@ public sealed class InMemoryRowVersionInterceptor : SaveChangesInterceptor
     {
         foreach (var entry in eventData.Context!.ChangeTracker.Entries<UrlShortener.Api.Persistence.Entities.UrlMapping>())
         {
-            if (entry.State == EntityState.Added)
+            if (entry.State is EntityState.Added or EntityState.Modified)
             {
-                entry.Entity.RowVersion = BitConverter.GetBytes(DateTime.UtcNow.Ticks);
+                entry.Entity.RowVersion = BitConverter.GetBytes(Interlocked.Increment(ref _nextVersion));
             }
         }
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Runs a callback once, just before the next SaveChanges is executed. Used to make another
+/// writer change a row between a service's read and its write.
+/// </summary>
+public sealed class BeforeSaveChangesInterceptor : SaveChangesInterceptor
+{
+    private Func<Task>? _callback;
+
+    public void RunOnce(Func<Task> callback) => _callback = callback;
+
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Exchange(ref _callback, null) is { } callback)
+        {
+            await callback();
+        }
+
+        return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 }
 

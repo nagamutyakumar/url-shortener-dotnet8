@@ -87,7 +87,8 @@ proxy sets and overwrites) would be read in `ClickTracker`.
   that differs only in case. Matching is case-sensitive.
 - **200 for inactive and expired links**, with `linkStatus` set to `inactive` or `expired`.
   Click history is deliberately retained (`ClickEvents → UrlMappings` uses `Restrict`), so it
-  stays readable after a link stops redirecting. There is no authentication, so, like every
+  stays readable after a link stops redirecting. `DELETE /api/v1/shorten/{code}` is what makes a
+  link inactive, and PUT keeps the mapping id, so history survives both (see `management.md`). There is no authentication, so, like every
   endpoint, this reveals that a code exists.
 - **`uniqueVisitors.status`** separates "unknown" from "zero":
   - `complete`: every click has a hash. `count` is a real count, including `0` for no clicks.
