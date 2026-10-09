@@ -21,8 +21,8 @@ package). Code: `src/UrlShortener.Api/RateLimiting/`.
 - **Every request counts**, including ones that then fail with 400, 404 or 409. The limiter runs
   before the endpoint, so a rejected request never reaches SQL Server, Redis or click tracking,
   and changes nothing.
-- **Redirects are not limited.** They are the hot, public path and are already served from
-  Redis. A per-IP limit there would mostly hurt many users behind one NAT or proxy. Abuse of
+- **Redirects are not limited.** They are the hot, public path, and when `ConnectionStrings:Redis`
+  is configured they can be served from the optional Redis cache (`caching.md`). A per-IP limit there would mostly hurt many users behind one NAT or proxy. Abuse of
   redirects is better handled at the edge (CDN/WAF).
 - **No queueing** (`QueueLimit: 0`). A request over the limit is rejected at once instead of being
   held open until the next window, so a client over its limit cannot tie up connections.

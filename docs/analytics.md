@@ -80,8 +80,8 @@ proxy sets and overwrites) would be read in `ClickTracker`.
   "expiresAtUtc": null,
   "totalClicks": 3,
   "uniqueVisitors": { "status": "partial", "count": 1, "clicksWithVisitorHash": 1 },
-  "countries": [ { "countryCode": "DE", "clicks": 1 } ],
-  "clicksWithUnknownCountry": 2
+  "countries": [],
+  "clicksWithUnknownCountry": 3
 }
 ```
 
@@ -98,7 +98,8 @@ proxy sets and overwrites) would be read in `ClickTracker`.
     those clicks.
   - `unavailable`: there are clicks but none has a hash. `count` is `null`, never `0`.
 - **`countries`** lists only stored codes, most clicks first. `clicksWithUnknownCountry` covers
-  the rest; today that is every click.
+  the rest. No country source is configured (see [Country](#country)), so today `countries` is
+  always empty and `clicksWithUnknownCountry` equals `totalClicks`, as in the example above.
 - **Freshness:** the totals include only persisted clicks. The newest clicks may still be
   queued, and lost clicks are never included.
 - **Queries:** one `COUNT_BIG` / `COUNT_BIG(DISTINCT VisitorHash)` aggregate plus one

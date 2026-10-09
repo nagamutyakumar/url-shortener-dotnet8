@@ -142,7 +142,8 @@ readinessProbe:
   reachable only from the orchestrator or internal network (e.g. not routed by the public
   ingress), to avoid giving away dependency state and to keep probe traffic off the internet.
   `RequireHost` or a separate management port are options.
-- **Every readiness probe opens a SQL connection** (from the pool) and pings Redis. At a 10 s
+- **Every readiness probe opens a new SQL connection** (non-pooled, `Pooling=false`, separate
+  from the application's pool) and pings Redis. At a 10 s
   period this is negligible; with many instances and short periods, add caching of results or use
   `AddHealthCheckPublisher` to run checks in the background.
 - **`SELECT 1` proves login and database access**, not that the schema is migrated or that

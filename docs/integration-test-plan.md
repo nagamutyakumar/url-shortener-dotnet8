@@ -9,7 +9,7 @@ SQL Server (e.g. a Testcontainers `mcr.microsoft.com/mssql/server` instance with
 
 Suggested harness: a separate `UrlShortener.IntegrationTests` project, opt-in (for
 example `[Trait("Category", "Integration")]`, excluded from the default `dotnet test`
-run), using `WebApplicationFactory<Program>` (requires adding `public partial class Program;`) with the connection string supplied via
+run), using `WebApplicationFactory<Program>` (`Program.cs` already declares `public partial class Program;`) with the connection string supplied via
 environment variable, never committed.
 
 | # | Scenario | Expected |

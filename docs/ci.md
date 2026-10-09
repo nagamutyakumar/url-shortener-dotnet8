@@ -21,7 +21,8 @@ Other settings:
 
 - **Permissions:** `contents: read` only. The workflow does not deploy, publish or use
   any secrets.
-- **Timeout:** the job is cancelled after 15 minutes. A normal run takes 1–2 minutes.
+- **Timeout:** the job is cancelled after 15 minutes, as a guard against hanging tests. No
+  typical run duration has been measured for this workflow.
 - **Concurrency:** when you push again to a pull request, its earlier run is cancelled.
   Runs on `main` are never cancelled, so every commit on `main` gets a result.
 
