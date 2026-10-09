@@ -53,6 +53,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // No Redis unless a test sets it in Settings, so a developer's user-secret or
         // ConnectionStrings__Redis environment variable never reaches the tests.
         builder.UseSetting("ConnectionStrings:Redis", "");
+        // Limits high enough that no test reaches them unless it sets its own in Settings.
+        // TestServer requests have no remote IP, so they all share one partition per factory.
+        builder.UseSetting("RateLimiting:Mutations:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Analytics:PermitLimit", "100000");
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);

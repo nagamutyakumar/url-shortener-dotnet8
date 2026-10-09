@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using UrlShortener.Api.Persistence.Entities;
+using UrlShortener.Api.RateLimiting;
 
 namespace UrlShortener.Api.Shortening;
 
@@ -11,7 +12,8 @@ public static class ShortenEndpoint
     {
         app.MapPost(Route, HandleAsync)
             .WithName("ShortenUrl")
-            .WithOpenApi();
+            .WithOpenApi()
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.MutationsPolicy);
 
         return app;
     }

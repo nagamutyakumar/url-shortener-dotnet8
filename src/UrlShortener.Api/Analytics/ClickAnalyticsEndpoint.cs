@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using UrlShortener.Api.RateLimiting;
 
 namespace UrlShortener.Api.Analytics;
 
@@ -10,7 +11,8 @@ public static class ClickAnalyticsEndpoint
     {
         app.MapGet(Route, HandleAsync)
             .WithName("GetClickAnalytics")
-            .WithOpenApi();
+            .WithOpenApi()
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.AnalyticsPolicy);
 
         return app;
     }

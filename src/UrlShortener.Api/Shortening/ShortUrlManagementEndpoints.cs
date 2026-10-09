@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using UrlShortener.Api.RateLimiting;
 
 namespace UrlShortener.Api.Shortening;
 
@@ -14,11 +15,13 @@ public static class ShortUrlManagementEndpoints
     {
         app.MapPut(Route, UpdateAsync)
             .WithName("UpdateShortUrl")
-            .WithOpenApi();
+            .WithOpenApi()
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.MutationsPolicy);
 
         app.MapDelete(Route, DeleteAsync)
             .WithName("DeleteShortUrl")
-            .WithOpenApi();
+            .WithOpenApi()
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.MutationsPolicy);
 
         return app;
     }

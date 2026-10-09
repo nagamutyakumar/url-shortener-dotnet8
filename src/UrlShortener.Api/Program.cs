@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Analytics;
 using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
+using UrlShortener.Api.RateLimiting;
 using UrlShortener.Api.Redirection;
 using UrlShortener.Api.ShortCodes;
 using UrlShortener.Api.Shortening;
@@ -48,6 +49,8 @@ builder.Services.AddSingleton<ClickTracker>();
 builder.Services.AddHostedService<ClickEventWriter>();
 builder.Services.AddScoped<ClickAnalyticsService>();
 builder.Services.AddProblemDetails();
+// Per-client-IP limits on the management and analytics APIs; redirects and Swagger are not limited.
+builder.Services.AddApiRateLimiting(builder.Configuration);
 // Development defaults this to true, which turns unreadable request bodies into
 // BadHttpRequestException; UseExceptionHandler (.NET 8) would then answer 500 instead of 400.
 // With false, binding failures return 400 in every environment and are logged at Debug.
@@ -68,6 +71,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+// Endpoints opt in with RequireRateLimiting; there is no global limiter.
+app.UseRateLimiter();
 
 app.MapShortenEndpoint();
 // Unauthenticated PUT/DELETE: suitable for a controlled assessment or demo only.
