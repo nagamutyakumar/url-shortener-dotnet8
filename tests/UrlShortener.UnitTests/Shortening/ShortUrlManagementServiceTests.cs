@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Persistence.Entities;
 using UrlShortener.Api.Shortening;
@@ -18,6 +19,7 @@ public sealed class ShortUrlManagementServiceTests
     private readonly string _databaseName = Guid.NewGuid().ToString();
     private readonly FixedTimeProvider _timeProvider = new(Now);
     private readonly BeforeSaveChangesInterceptor _beforeSave = new();
+    private readonly FakeRedirectCache _cache = new();
 
     [Fact]
     public async Task UpdateAsync_ReplacesCanonicalUrlAndHash_KeepsCodeIdAndCreatedAt()
@@ -296,6 +298,106 @@ public sealed class ShortUrlManagementServiceTests
         Assert.Equal("https://example.com/other-writer", stored.OriginalUrl);
     }
 
+    [Fact]
+    public async Task UpdateAsync_Success_InvalidatesCacheEntry()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+        _cache.Entries["Abc1234"] = new CachedRedirect(1, "https://example.com/old", null);
+
+        await UpdateAsync("Abc1234", Request("https://example.com/new"));
+
+        Assert.Equal(new[] { "Abc1234" }, _cache.Removes);
+        Assert.False(_cache.Entries.ContainsKey("Abc1234"));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_InvalidationFails_StillReturnsUpdatedAndKeepsCommittedChange()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+        _cache.FailRemoves = true;
+
+        var outcome = await UpdateAsync("Abc1234", Request("https://example.com/new"));
+
+        Assert.IsType<ManagementOutcome.Updated>(outcome);
+        Assert.Single(_cache.Removes);
+        Assert.Equal("https://example.com/new", (await ReadAsync("Abc1234")).OriginalUrl);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NotFoundInvalidOrConflict_DoesNotTouchCache()
+    {
+        await SeedAsync(Mapping("Abc1234"), Mapping("Inact01", isActive: false));
+
+        Assert.IsType<ManagementOutcome.NotFound>(await UpdateAsync("abc1234", Request("https://example.com/new")));
+        Assert.IsType<ManagementOutcome.NotFound>(await UpdateAsync("Inact01", Request("https://example.com/new")));
+        Assert.IsType<ManagementOutcome.Invalid>(await UpdateAsync("Abc1234", Request("ftp://example.com/")));
+        _beforeSave.RunOnce(() => ConcurrentlyAsync(m => m.OriginalUrl = "https://example.com/other-writer"));
+        Assert.IsType<ManagementOutcome.Conflict>(await UpdateAsync("Abc1234", Request("https://example.com/new")));
+
+        Assert.Empty(_cache.Removes);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Success_InvalidatesCacheEntry()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+        _cache.Entries["Abc1234"] = new CachedRedirect(1, "https://example.com/old", null);
+
+        await DeleteAsync("Abc1234");
+
+        Assert.Equal(new[] { "Abc1234" }, _cache.Removes);
+        Assert.False(_cache.Entries.ContainsKey("Abc1234"));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_AlreadyInactive_StillInvalidatesToRepairAnEarlierFailure()
+    {
+        await SeedAsync(Mapping("Abc1234", isActive: false));
+        _cache.Entries["Abc1234"] = new CachedRedirect(1, "https://example.com/old", null);
+
+        Assert.IsType<ManagementOutcome.Deleted>(await DeleteAsync("Abc1234"));
+
+        Assert.False(_cache.Entries.ContainsKey("Abc1234"));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_InvalidationFails_StillReturnsDeletedAndKeepsCommittedChange()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+        _cache.FailRemoves = true;
+
+        Assert.IsType<ManagementOutcome.Deleted>(await DeleteAsync("Abc1234"));
+
+        Assert.False((await ReadAsync("Abc1234")).IsActive);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_NotFoundOrConflict_DoesNotTouchCache()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+
+        Assert.IsType<ManagementOutcome.NotFound>(await DeleteAsync("abc1234"));
+        _beforeSave.RunOnce(() => ConcurrentlyAsync(m => m.OriginalUrl = "https://example.com/other-writer"));
+        Assert.IsType<ManagementOutcome.Conflict>(await DeleteAsync("Abc1234"));
+
+        Assert.Empty(_cache.Removes);
+    }
+
+    [Fact]
+    public async Task InvalidationHappensAfterCommit()
+    {
+        await SeedAsync(Mapping("Abc1234"));
+        string? urlSeenAtInvalidation = null;
+        var cache = new CommitObservingCache(async () => urlSeenAtInvalidation = (await ReadAsync("Abc1234")).OriginalUrl);
+        await using var context = CreateContext();
+        var service = new ShortUrlManagementService(
+            context, cache, _timeProvider, NullLogger<ShortUrlManagementService>.Instance);
+
+        await service.UpdateAsync("Abc1234", Request("https://example.com/new"), default);
+
+        Assert.Equal("https://example.com/new", urlSeenAtInvalidation);
+    }
+
     private static UpdateShortUrlRequest Request(string? originalUrl) => new() { OriginalUrl = originalUrl };
 
     private static UpdateShortUrlRequest Request(string? originalUrl, DateTimeOffset? expiresAtUtc) =>
@@ -327,7 +429,7 @@ public sealed class ShortUrlManagementServiceTests
     }
 
     private ShortUrlManagementService CreateService(UrlShortenerDbContext context) =>
-        new(context, _timeProvider, NullLogger<ShortUrlManagementService>.Instance);
+        new(context, _cache, _timeProvider, NullLogger<ShortUrlManagementService>.Instance);
 
     /// <summary>Another request's write, through its own context, committed before ours.</summary>
     private async Task ConcurrentlyAsync(Action<UrlMapping> change)
@@ -373,5 +475,15 @@ public sealed class ShortUrlManagementServiceTests
             ? builder.AddInterceptors(new InMemoryRowVersionInterceptor())
             : builder.AddInterceptors(beforeSave, new InMemoryRowVersionInterceptor());
         return new UrlShortenerDbContext(builder.Options, clock ?? _timeProvider);
+    }
+
+    /// <summary>Runs a callback when asked to remove, to observe what SQL holds at that moment.</summary>
+    private sealed class CommitObservingCache(Func<Task> onRemove) : IRedirectCache
+    {
+        public Task<CachedRedirect?> GetAsync(string shortCode) => Task.FromResult<CachedRedirect?>(null);
+
+        public Task SetAsync(string shortCode, CachedRedirect entry, TimeSpan timeToLive) => Task.CompletedTask;
+
+        public Task RemoveAsync(string shortCode) => onRemove();
     }
 }

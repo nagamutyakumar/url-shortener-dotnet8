@@ -50,6 +50,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment(_environment);
         // Program requires a connection string at startup; it is never used.
         builder.UseSetting("ConnectionStrings:UrlShortener", "Server=unused;Database=unused");
+        // No Redis unless a test sets it in Settings, so a developer's user-secret or
+        // ConnectionStrings__Redis environment variable never reaches the tests.
+        builder.UseSetting("ConnectionStrings:Redis", "");
         foreach (var (key, value) in Settings)
         {
             builder.UseSetting(key, value);

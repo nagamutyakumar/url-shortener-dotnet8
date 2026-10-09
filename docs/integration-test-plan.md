@@ -85,3 +85,19 @@ SQL Server, verify:
 | M6 | DELETE twice | 204, 204; the second `RowVersion`/`UpdatedAtUtc` equal the first (no UPDATE issued) |
 | M7 | Seed clicks, then PUT and DELETE | `ClickEvents` row count unchanged; analytics totals unchanged; `linkStatus` becomes `inactive` |
 | M8 | PUT `expiresAtUtc` = `...T00:00:00.1239Z` | Stored as `.123`, response shows `.123Z`; a following POST of the same URL and expiry reuses the code (hash updated, no rounding mismatch) |
+
+# Integration test plan: Redis redirect cache
+
+The in-process tests use `FakeRedirectCache`, plus one real StackExchange.Redis client pointed at
+an unreachable port. Against a live Redis (and SQL Server), verify:
+
+| # | Scenario | Expected |
+|---|----------|----------|
+| C1 | Redirect `Abc1234` twice; `redis-cli GET urlshortener:redirect:v1:Abc1234` and `PTTL` | First request logs a SQL query, second does not. Value is the JSON entry; `PTTL` ≤ 300000 |
+| C2 | Link expiring in 30 s; redirect, then `PTTL` | ≤ 30000. After expiry: key gone, redirect 404 |
+| C3 | `SET` a hand-made entry with `ExpiresAtUtc` in the past and a long TTL, then redirect | 404 (or 302 only if SQL says the link is still active). Proves the hit-time expiry check |
+| C4 | Redirect `Abc1234`, then request `abc1234` | 404; no `abc1234` key is created |
+| C5 | Redirect, PUT a new URL, redirect | Key deleted by PUT (`MONITOR` shows `DEL`); second redirect returns the new URL and re-creates the key |
+| C6 | Redirect, DELETE, redirect | Key deleted; 404; analytics still 200 `inactive` with the clicks, including the cached hit |
+| C7 | Stop Redis; redirect, PUT, DELETE; start Redis | Startup without Redis succeeds; 302/200/204 with no added latency (FailFast); one `ConnectionFailed` warning, an error per failed invalidation, then `ConnectionRestored` |
+| C8 | Pause Redis (`DEBUG SLEEP 5`) with `asyncTimeout=500` | Redirects take ≈ 500 ms and return 302 from SQL; timeout warnings logged |

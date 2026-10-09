@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Persistence.Entities;
 using UrlShortener.Api.ShortCodes;
@@ -18,19 +19,26 @@ namespace UrlShortener.Api.Shortening;
 /// This guards the read-modify-write inside one request only. Across separate requests the last
 /// writer wins, because no ETag/If-Match token is exchanged with clients (see docs/management.md).</para>
 /// <para>The mapping's Id is never changed, so its click history stays attached.</para>
+/// <para>Redirect cache: after a successful write (and on a repeated delete) the code's entry is
+/// removed, after the SQL commit. A failed removal is logged and does not change the response,
+/// because the write is already committed; the stale entry then lives at most
+/// <see cref="RedirectCacheOptions.MaxTimeToLive"/>. See docs/caching.md.</para>
 /// </remarks>
 public sealed class ShortUrlManagementService
 {
     private readonly UrlShortenerDbContext _dbContext;
+    private readonly IRedirectCache _cache;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ShortUrlManagementService> _logger;
 
     public ShortUrlManagementService(
         UrlShortenerDbContext dbContext,
+        IRedirectCache cache,
         TimeProvider timeProvider,
         ILogger<ShortUrlManagementService> logger)
     {
         _dbContext = dbContext;
+        _cache = cache;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -85,9 +93,13 @@ public sealed class ShortUrlManagementService
         }
 
         // An unchanged body leaves the entity Unchanged, so nothing is written.
-        return await TrySaveAsync(mapping, cancellationToken)
-            ? new ManagementOutcome.Updated(mapping)
-            : new ManagementOutcome.Conflict();
+        if (!await TrySaveAsync(mapping, cancellationToken))
+        {
+            return new ManagementOutcome.Conflict();
+        }
+
+        await InvalidateCacheAsync(code);
+        return new ManagementOutcome.Updated(mapping);
     }
 
     /// <summary>
@@ -108,16 +120,39 @@ public sealed class ShortUrlManagementService
             return new ManagementOutcome.NotFound();
         }
 
-        if (!mapping.IsActive)
+        // Already inactive: nothing to write, but the cache entry is still removed, which also
+        // repairs an invalidation that failed on the first delete.
+        if (mapping.IsActive)
         {
-            return new ManagementOutcome.Deleted();
+            mapping.IsActive = false;
+            if (!await TrySaveAsync(mapping, cancellationToken))
+            {
+                return new ManagementOutcome.Conflict();
+            }
         }
 
-        mapping.IsActive = false;
+        await InvalidateCacheAsync(code);
+        return new ManagementOutcome.Deleted();
+    }
 
-        return await TrySaveAsync(mapping, cancellationToken)
-            ? new ManagementOutcome.Deleted()
-            : new ManagementOutcome.Conflict();
+    /// <summary>
+    /// Runs after the SQL commit. Removing before the commit would let a concurrent redirect
+    /// re-cache the old row before the new one is visible.
+    /// </summary>
+    private async Task InvalidateCacheAsync(string code)
+    {
+        try
+        {
+            await _cache.RemoveAsync(code);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Redirect cache invalidation failed for {ShortCode}; the change is saved, but redirects may " +
+                "use the previous value until the cache entry expires.",
+                code);
+        }
     }
 
     private async Task<UrlMapping?> FindAsync(string code, CancellationToken cancellationToken)

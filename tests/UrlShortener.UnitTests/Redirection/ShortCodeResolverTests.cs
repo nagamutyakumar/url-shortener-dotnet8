@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Persistence.Entities;
 using UrlShortener.Api.Redirection;
@@ -8,7 +11,8 @@ namespace UrlShortener.UnitTests.Redirection;
 
 // Uses the EF Core InMemory provider, whose string comparison is always ordinal. Case-sensitive
 // matching in SQL Server depends on the ShortCode column's binary collation; see
-// docs/integration-test-plan.md.
+// docs/integration-test-plan.md. Caching is disabled here (NullRedirectCache); cache-aside
+// behaviour is covered by CachedShortCodeResolverTests.
 public sealed class ShortCodeResolverTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
@@ -31,7 +35,7 @@ public sealed class ShortCodeResolverTests
         await SeedAsync(Mapping("Other01", "https://example.com/other"), mapping);
         await using var context = CreateContext();
 
-        var resolved = await new ShortCodeResolver(context, _timeProvider).ResolveAsync("Abc1234", default);
+        var resolved = await CreateResolver(context).ResolveAsync("Abc1234", default);
 
         Assert.Equal(new ResolvedShortCode(mapping.Id, "https://example.com/"), resolved);
     }
@@ -123,7 +127,7 @@ public sealed class ShortCodeResolverTests
         // Any database access through a disposed context throws ObjectDisposedException.
         var context = CreateContext();
         await context.DisposeAsync();
-        var resolver = new ShortCodeResolver(context, _timeProvider);
+        var resolver = CreateResolver(context);
 
         Assert.Null(await resolver.ResolveAsync(code, default));
     }
@@ -133,7 +137,7 @@ public sealed class ShortCodeResolverTests
     {
         await SeedAsync(Mapping("Abc1234", "https://example.com/"));
         await using var context = CreateContext();
-        var resolver = new ShortCodeResolver(context, _timeProvider);
+        var resolver = CreateResolver(context);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => resolver.ResolveAsync("Abc1234", new CancellationToken(canceled: true)));
@@ -150,8 +154,15 @@ public sealed class ShortCodeResolverTests
     private async Task<string?> ResolveAsync(string code)
     {
         await using var context = CreateContext();
-        return (await new ShortCodeResolver(context, _timeProvider).ResolveAsync(code, default))?.OriginalUrl;
+        return (await CreateResolver(context).ResolveAsync(code, default))?.OriginalUrl;
     }
+
+    private ShortCodeResolver CreateResolver(UrlShortenerDbContext context) => new(
+        context,
+        NullRedirectCache.Instance,
+        _timeProvider,
+        Options.Create(new RedirectCacheOptions()),
+        NullLogger<ShortCodeResolver>.Instance);
 
     private UrlShortenerDbContext CreateContext() => new(
         new DbContextOptionsBuilder<UrlShortenerDbContext>()

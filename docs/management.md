@@ -45,7 +45,9 @@ stays expired. The response's `expiresAtUtc` shows this.
 Unchanged by PUT: the short code, `Id`, `CreatedAtUtc`, `IsActive`, and every `ClickEvents` row
 (they reference `Id`). Analytics keep counting across the change. `UpdatedAtUtc` is stamped by
 `UrlShortenerDbContext`. Redirects are 302 and not cacheable by default, so the new destination
-takes effect on the next request.
+takes effect on the next request once the redirect cache entry has been removed (see
+`caching.md`: invalidation is best-effort and staleness is bounded by
+`RedirectCache:MaxTimeToLive`).
 
 ## `DELETE /api/v1/shorten/{code}`
 

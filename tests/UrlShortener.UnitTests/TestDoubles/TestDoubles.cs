@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using UrlShortener.Api.Analytics;
+using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.ShortCodes;
 
@@ -173,4 +174,60 @@ public sealed class ListLogger<T> : ILogger<T>
         Exception? exception,
         Func<TState, Exception?, string> formatter) =>
         Entries.Enqueue((logLevel, formatter(state, exception), exception));
+}
+
+/// <summary>
+/// In-memory stand-in for Redis. Records every call (with TTLs) and can fail any operation, so
+/// the cache-aside and invalidation policies can be tested without a Redis server.
+/// </summary>
+public sealed class FakeRedirectCache : IRedirectCache
+{
+    public ConcurrentDictionary<string, CachedRedirect> Entries { get; } = new(StringComparer.Ordinal);
+
+    public ConcurrentQueue<string> Gets { get; } = new();
+
+    public ConcurrentQueue<(string ShortCode, CachedRedirect Entry, TimeSpan TimeToLive)> Sets { get; } = new();
+
+    public ConcurrentQueue<string> Removes { get; } = new();
+
+    public bool FailGets { get; set; }
+
+    public bool FailSets { get; set; }
+
+    public bool FailRemoves { get; set; }
+
+    public Task<CachedRedirect?> GetAsync(string shortCode)
+    {
+        Gets.Enqueue(shortCode);
+        if (FailGets)
+        {
+            throw new InvalidOperationException("Simulated Redis lookup failure.");
+        }
+
+        return Task.FromResult(Entries.TryGetValue(shortCode, out var entry) ? entry : null);
+    }
+
+    public Task SetAsync(string shortCode, CachedRedirect entry, TimeSpan timeToLive)
+    {
+        Sets.Enqueue((shortCode, entry, timeToLive));
+        if (FailSets)
+        {
+            throw new InvalidOperationException("Simulated Redis write failure.");
+        }
+
+        Entries[shortCode] = entry;
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveAsync(string shortCode)
+    {
+        Removes.Enqueue(shortCode);
+        if (FailRemoves)
+        {
+            throw new InvalidOperationException("Simulated Redis delete failure.");
+        }
+
+        Entries.TryRemove(shortCode, out _);
+        return Task.CompletedTask;
+    }
 }

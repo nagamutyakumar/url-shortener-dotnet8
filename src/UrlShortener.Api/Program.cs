@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Analytics;
+using UrlShortener.Api.Caching;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.Redirection;
 using UrlShortener.Api.ShortCodes;
@@ -22,6 +23,8 @@ builder.Services.AddSingleton<IShortCodeConflictDetector, SqlServerShortCodeConf
 builder.Services.AddScoped<UrlShorteningService>();
 builder.Services.AddScoped<ShortUrlManagementService>();
 builder.Services.AddScoped<ShortCodeResolver>();
+// Optional Redis cache for redirects: enabled only when ConnectionStrings:Redis is set.
+builder.Services.AddRedirectCache(builder.Configuration);
 builder.Services.AddSingleton<ShortUrlBuilder>();
 builder.Services.AddOptions<ShortUrlOptions>()
     .Bind(builder.Configuration.GetSection(ShortUrlOptions.SectionName))
@@ -51,6 +54,9 @@ builder.Services.AddProblemDetails();
 builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 
 var app = builder.Build();
+
+// Connects to Redis at startup when configured; an unreachable Redis does not stop the app.
+app.Services.ConnectRedirectCache();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

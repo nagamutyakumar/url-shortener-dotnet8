@@ -3,7 +3,9 @@
 ## Collection (`GET /{code}`)
 
 Each successful 302 queues exactly one click; 404s (malformed, unknown, wrong-case,
-inactive, expired) queue nothing. The redirect never waits for the database.
+inactive, expired) queue nothing. The redirect never waits for the database. Redirects served
+from the Redis cache (`caching.md`) queue their click the same way, with the mapping id from the
+cached entry.
 
 ```
 RedirectEndpoint ─► ClickTracker.Track ─► ClickEventQueue (bounded Channel) ─► ClickEventWriter (BackgroundService) ─► ClickEvents

@@ -18,7 +18,7 @@ Content-Type: application/json
 }
 
 ### Update destination and expiration (200); replace Abc1234 with a code returned above.
-### Management endpoints are unauthenticated: controlled assessment/demo use only.
+# Management endpoints are unauthenticated: controlled assessment/demo use only.
 PUT {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
 Content-Type: application/json
 
@@ -59,7 +59,9 @@ DELETE {{UrlShortener.Api_HostAddress}}/api/v1/shorten/Abc1234
 ### Update or delete an unknown, wrong-case, malformed or (for PUT) deleted code (404)
 DELETE {{UrlShortener.Api_HostAddress}}/api/v1/shorten/not-a-code
 
-### Redirect (302 with Location) for an active code; replace with a code returned above
+### Redirect (302 with Location) for an active code; replace with a code returned above.
+# With ConnectionStrings:Redis set, the first call fills the cache and repeats are served from it
+# (inspect with: redis-cli GET urlshortener:redirect:v1:Abc1234). PUT/DELETE above remove the entry.
 GET {{UrlShortener.Api_HostAddress}}/Abc1234
 
 ### Unknown, inactive, expired or malformed code (404)
