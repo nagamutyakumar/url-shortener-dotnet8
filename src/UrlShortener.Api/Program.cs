@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Analytics;
 using UrlShortener.Api.Caching;
+using UrlShortener.Api.Health;
 using UrlShortener.Api.Persistence;
 using UrlShortener.Api.RateLimiting;
 using UrlShortener.Api.Redirection;
@@ -51,6 +52,8 @@ builder.Services.AddScoped<ClickAnalyticsService>();
 builder.Services.AddProblemDetails();
 // Per-client-IP limits on the management and analytics APIs; redirects and Swagger are not limited.
 builder.Services.AddApiRateLimiting(builder.Configuration);
+// GET /health/live (no dependencies) and GET /health/ready (SQL Server, plus Redis when configured).
+builder.Services.AddApiHealthChecks(builder.Configuration);
 // Development defaults this to true, which turns unreadable request bodies into
 // BadHttpRequestException; UseExceptionHandler (.NET 8) would then answer 500 instead of 400.
 // With false, binding failures return 400 in every environment and are logged at Debug.
@@ -78,6 +81,7 @@ app.MapShortenEndpoint();
 // Unauthenticated PUT/DELETE: suitable for a controlled assessment or demo only.
 app.MapShortUrlManagementEndpoints();
 app.MapClickAnalyticsEndpoint();
+app.MapApiHealthChecks();
 app.MapRedirectEndpoint();
 
 app.Run();

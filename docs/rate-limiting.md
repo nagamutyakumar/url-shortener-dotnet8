@@ -10,7 +10,7 @@ package). Code: `src/UrlShortener.Api/RateLimiting/`.
 |---|---|---|
 | `mutations` | `POST /api/v1/shorten`, `PUT /api/v1/shorten/{code}`, `DELETE /api/v1/shorten/{code}` | 20 requests / 60 s per client |
 | `analytics` | `GET /api/v1/analytics/{code}` | 60 requests / 60 s per client |
-| none | `GET /{code}` redirects, Swagger | not limited |
+| none | `GET /{code}` redirects, `/health/live`, `/health/ready`, Swagger | not limited |
 
 - **Fixed window.** The simplest algorithm the middleware offers, and easy to reason about: each
   client gets `PermitLimit` requests per window, and the count resets when the window ends.

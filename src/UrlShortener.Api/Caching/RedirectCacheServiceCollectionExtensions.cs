@@ -20,15 +20,14 @@ public static class RedirectCacheServiceCollectionExtensions
                 $"{RedirectCacheOptions.MinTimeToLive} and {RedirectCacheOptions.MaxAllowedTimeToLive}.")
             .ValidateOnStart();
 
-        var connectionString = configuration.GetConnectionString(ConnectionStringName);
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (!IsRedisConfigured(configuration))
         {
             services.AddSingleton<IRedirectCache>(NullRedirectCache.Instance);
             return services;
         }
 
         // Parsed now so a malformed connection string fails at startup, not on a redirect.
-        var redisOptions = CreateConfigurationOptions(connectionString);
+        var redisOptions = CreateConfigurationOptions(configuration.GetConnectionString(ConnectionStringName)!);
 
         services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
@@ -53,6 +52,10 @@ public static class RedirectCacheServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>True when <c>ConnectionStrings:Redis</c> is set, i.e. the Redis cache is enabled.</summary>
+    public static bool IsRedisConfigured(IConfiguration configuration) =>
+        !string.IsNullOrWhiteSpace(configuration.GetConnectionString(ConnectionStringName));
 
     /// <summary>
     /// Connects to Redis, when configured, during startup instead of on the first redirect. Does
