@@ -20,7 +20,7 @@ checked. Its purpose is to let a reviewer judge the work with that context in mi
 
 This log is reconstructed from evidence in the repository:
 
-- `git log` (15 commits, 2026-10-07 to 2026-10-09);
+- `git log` (16 commits through `eba943b`, 2026-10-07 to 2026-10-09);
 - the design and validation notes in `docs/` written with each milestone;
 - comments in the source and test code;
 - for Milestone 11 itself, the commands run while writing this document.
@@ -81,7 +81,7 @@ Two features of the history are consistent with this loop:
 | `52e4f36` | 2026-10-09 | Add SQL Server and Redis health checks with bounded timeouts | health tests; `health-checks.md` |
 | `3ab36ff` | 2026-10-09 | Add Docker Compose deployment with SQL migrations and Redis | `docker.md` |
 | `03f2d9d` | 2026-10-09 | Add GitHub Actions CI for .NET 8 build and tests | `ci.md` |
-| (uncommitted) | – | Milestone 11: `README.md`, this document, and corrections to existing docs | – |
+| `eba943b` | 2026-10-09 | Add project README and AI collaboration documentation | `README.md`, this document; corrections to five existing docs |
 
 ## Division of responsibility
 
@@ -238,4 +238,4 @@ drafting, it read the source, tests, configuration, Docker files, workflow, all 
 and the full Git history. A follow-up accuracy pass corrected five statements in existing docs
 that did not match the code: `integration-test-plan.md`, `health-checks.md`, `analytics.md`,
 `rate-limiting.md` and `ci.md`. No application code, tests, configuration or dependencies were
-changed. The project owner reviews and commits the result.
+changed. The project owner reviewed the result and committed it as `eba943b`.
