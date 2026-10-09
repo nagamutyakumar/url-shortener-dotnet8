@@ -1,0 +1,36 @@
+# Build context for the Dockerfile: only src/ is copied into the image.
+
+# Build output
+**/bin/
+**/obj/
+**/out/
+**/publish/
+**/TestResults/
+
+# VCS, IDE and user-specific files
+.git/
+.gitignore
+.vs/
+.vscode/
+.idea/
+**/*.user
+**/*.suo
+**/*.swp
+**/.DS_Store
+
+# Local secrets and environment files (.env.example is safe but not needed in the image)
+.env
+.env.*
+**/secrets.json
+**/*.pfx
+**/*.key
+**/*.pem
+
+# Not needed to build the API image
+tests/
+docs/
+**/*.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
+compose*.yaml

@@ -131,6 +131,8 @@ readinessProbe:
 - Docker `HEALTHCHECK` has a single probe; point it at `/health/live` if the container should be
   restarted, or at `/health/ready` only for status reporting. The ASP.NET Core runtime images do
   not include `curl`, so it needs to be installed or replaced by a small probe binary.
+  `docker-compose.yml` probes `/health/ready` for status reporting using bash's `/dev/tcp`
+  (see [docker.md](docker.md)).
 - A startup probe, if used, can point at `/health/ready` to hold traffic until the database is
   reachable.
 
